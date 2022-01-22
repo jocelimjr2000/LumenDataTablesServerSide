@@ -2,7 +2,7 @@
 
 namespace JocelimJr\LumenDTSS\Repositories;
 
-use JocelimJr\LumenDTSS\DTSSRepositoryInterface;
+use JocelimJr\LumenDTSS\Interfaces\DTSSRepositoryInterface;
 use JocelimJR\LumenDTSS\Exceptions\InvalidModelException;
 use Illuminate\Http\Request;
 
