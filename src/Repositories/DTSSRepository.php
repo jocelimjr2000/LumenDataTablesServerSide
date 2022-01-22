@@ -52,6 +52,7 @@ class DTSSRepository implements DTSSRepositoryInterface
                     
                     if($first){
                         $query->where($c['name'], 'LIKE', "%{$search}%");
+                        $first = false;
                     }else{
                         $query->orWhere($c['name'], 'LIKE', "%{$search}%");
                     }
