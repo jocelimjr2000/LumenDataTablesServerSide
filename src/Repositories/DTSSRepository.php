@@ -30,6 +30,21 @@ class DTSSRepository implements DTSSRepositoryInterface
         $start = $request->start ?: $request->input('start');
         $search = isset($request->search['value']) ? $request->search['value'] : $request->input('search.value');
         $order = $request->order ?: $request->input('order');
+        $columnsPosition = $request->columnsPosition ?: $request->input('columnsPosition');
+
+        if(is_array($columnsPosition) && count($columnsPosition) > 0){
+            $newOrder = [];
+            foreach($order as $k => $o){
+                $_to = $o;
+                if(isset($columnsPosition[$o['column']])){
+                    $_to['column'] = $columnsPosition[$o['column']];
+                }
+
+                $newOrder[] = $_to;
+            }
+
+            $order = $newOrder;
+        } 
         
         $recordsTotal = $modelClass::count();
         $recordsFiltered = $recordsTotal;
