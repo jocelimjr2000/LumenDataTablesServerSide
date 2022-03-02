@@ -3,6 +3,7 @@
 namespace JocelimJr\LumenDTSS\Repositories;
 
 use JocelimJr\LumenDTSS\Interfaces\DTSSRepositoryInterface;
+use JocelimJr\LumenDTSS\Exceptions\ColumnNotFoundException;
 use JocelimJR\LumenDTSS\Exceptions\InvalidModelException;
 use Illuminate\Http\Request;
 
@@ -30,21 +31,6 @@ class DTSSRepository implements DTSSRepositoryInterface
         $start = $request->start ?: $request->input('start');
         $search = isset($request->search['value']) ? $request->search['value'] : $request->input('search.value');
         $order = $request->order ?: $request->input('order');
-        $columnsPosition = $request->columnsPosition ?: $request->input('columnsPosition');
-
-        if(is_array($columnsPosition) && count($columnsPosition) > 0){
-            $newOrder = [];
-            foreach($order as $k => $o){
-                $_to = $o;
-                if(isset($columnsPosition[$o['column']])){
-                    $_to['column'] = $columnsPosition[$o['column']];
-                }
-
-                $newOrder[] = $_to;
-            }
-
-            $order = $newOrder;
-        } 
         
         $recordsTotal = $modelClass::count();
         $recordsFiltered = $recordsTotal;
@@ -85,7 +71,12 @@ class DTSSRepository implements DTSSRepositoryInterface
         
         if(is_array($order)){
             foreach($order as $v){
-                $q->orderBy($columns[$v['column']]['name'], $v['dir']);
+
+                if(!isset($columns[$v['name']]['name'])){
+                    throw new ColumnNotFoundException($v['name']);
+                }
+
+                $q->orderBy($columns[$v['name']]['name'], $v['dir']);
             }
         }
 
