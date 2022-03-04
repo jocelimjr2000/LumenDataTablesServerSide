@@ -5,6 +5,7 @@ namespace JocelimJr\LumenDTSS\Repositories;
 use JocelimJr\LumenDTSS\Interfaces\DTSSRepositoryInterface;
 use JocelimJr\LumenDTSS\Exceptions\ColumnNotFoundException;
 use JocelimJR\LumenDTSS\Exceptions\InvalidModelException;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
 class DTSSRepository implements DTSSRepositoryInterface
@@ -91,5 +92,78 @@ class DTSSRepository implements DTSSRepositoryInterface
         
         return $json_data;
     }
+    
+    /**
+     * byQueryBuilder
+     *
+     * @param  mixed $request
+     * @param  mixed $modelClass
+     * @param  mixed $columns
+     * @return array
+     */
+    public function byQueryBuilder(Request $request, Builder $modelClass, array $columns): array
+    {
 
+        // Data received
+        $draw = $request->draw ?: $request->input('draw');
+        $limit = $request->length ?: $request->input('length');
+        $start = $request->start ?: $request->input('start');
+        $search = isset($request->search['value']) ? $request->search['value'] : $request->input('search.value');
+        $order = $request->order ?: $request->input('order');
+        
+        $recordsTotal = $modelClass->count();
+        $recordsFiltered = $recordsTotal;
+
+        $q = null;
+
+        if(empty($search)){
+            $q = $modelClass->offset($start)->limit($limit);
+        }
+
+        else{
+
+            $q = $modelClass->where(function($query) use ($columns, $search) {
+
+                $first = true;
+                foreach($columns as $c){
+                    if(isset($c['searchable']) && $c['searchable'] == false){
+                        continue;
+                    }
+                    
+                    if($first){
+                        $query->where($c['name'], 'LIKE', "%{$search}%");
+                        $first = false;
+                    }else{
+                        $query->orWhere($c['name'], 'LIKE', "%{$search}%");
+                    }
+                }
+            });
+
+            $recordsFiltered = $q->count();
+
+            $q->offset($start)->limit($limit);
+        }
+
+        if(is_array($order)){
+            foreach($order as $v){
+
+                if(!isset($columns[$v['name']]['name'])){
+                    throw new ColumnNotFoundException($v['name']);
+                }
+
+                $q->orderBy($columns[$v['name']]['name'], $v['dir']);
+            }
+        }
+
+        $data = $q->get();
+
+        $json_data = [
+            'draw' => $draw,
+            'recordsTotal' => intval($recordsTotal),
+            'recordsFiltered' => intval($recordsFiltered),
+            'data' => $data
+        ];
+        
+        return $json_data;
+    }
 }
