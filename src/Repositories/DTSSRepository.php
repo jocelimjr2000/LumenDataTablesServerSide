@@ -147,11 +147,15 @@ class DTSSRepository implements DTSSRepositoryInterface
         if(is_array($order)){
             foreach($order as $v){
 
-                if(!isset($columns[$v['name']]['name'])){
+                if(!isset($v['column']) || empty($v['column'])){
+                    continue;
+                }
+
+                if(!isset($columns[$v['column']]['name'])){
                     throw new ColumnNotFoundException($v['name']);
                 }
 
-                $q->orderBy($columns[$v['name']]['name'], $v['dir']);
+                $q->orderBy($columns[$v['column']]['name'], $v['dir']);
             }
         }
 
