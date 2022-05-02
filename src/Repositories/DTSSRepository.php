@@ -69,8 +69,13 @@ class DTSSRepository implements DTSSRepositoryInterface
          */
         $q = $this->__search();
 
-        foreach ($extraWhere as $k => $v) {
-            $q->where($k, $v);
+        if(count($extraWhere) > 0){
+            foreach ($extraWhere as $k => $v) {
+                $q->where($k, $v);
+            }
+
+            $this->resultRecordsTotal = $q->count();
+            $this->resultRecordsFiltered = $this->resultRecordsTotal;
         }
 
         /**
@@ -236,6 +241,9 @@ class DTSSRepository implements DTSSRepositoryInterface
 
             $query->where($this->confColumns[$v['name']]['name'], 'LIKE', "%" . $v['search']['value'] . "%");
         }
+
+        $this->resultRecordsTotal = $query->count();
+        $this->resultRecordsFiltered = $this->resultRecordsTotal;
     }
     
     /**
