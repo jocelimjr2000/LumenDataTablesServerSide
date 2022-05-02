@@ -1,5 +1,13 @@
 <?php
 
+/**
+ * Doc
+ * 
+ * https://datatables.net/manual/server-side
+ * https://github.com/DataTables/DataTables/blob/master/examples/server_side/scripts/ssp.class.php
+ * 
+ */
+
 namespace JocelimJr\LumenDTSS\Repositories;
 
 use JocelimJr\LumenDTSS\Interfaces\DTSSRepositoryInterface;
@@ -10,168 +18,238 @@ use Illuminate\Http\Request;
 
 class DTSSRepository implements DTSSRepositoryInterface
 {
-    
+    /**
+     * Request
+     */
+    private $requestDraw = null;
+    private $requestLimit = null;
+    private $requestStart = null;
+    private $requestSearch = null;
+    private $requestOrder = null;
+    private $requestColumns = null;
+    private $requestModelClass = null;
+
+    /** 
+     * Conf
+     */
+    private $confColumns = null;
+
+    /**
+     * Result
+     */
+    private $resultRecordsTotal = null;
+    private $resultRecordsFiltered = null;
+    private $resultData = null;
+
     /**
      * simple
      *
      * @param  mixed $request
      * @param  mixed $modelClass
-     * @param  mixed $columns
+     * @param  mixed $confColumns
      * @param  mixed $extraWhere
      * @return array
      */
-    public function simple(Request $request, string $modelClass, array $columns, array $extraWhere = []): array
+    public function simple(Request $request, string $modelClass, array $confColumns, array $extraWhere = []): array
     {
         if (!is_subclass_of($modelClass, 'Illuminate\Database\Eloquent\Model')) {
             throw new InvalidModelException($modelClass);
         }
 
-        // Data received
-        $draw = $request->draw ?: $request->input('draw');
-        $limit = $request->length ?: $request->input('length');
-        $start = $request->start ?: $request->input('start');
-        $search = isset($request->search['value']) ? $request->search['value'] : $request->input('search.value');
-        $order = $request->order ?: $request->input('order');
-        
-        $recordsTotal = $modelClass::count();
-        $recordsFiltered = $recordsTotal;
+        /**
+         * Load reveived data
+         */
+        $this->__loadRequestData($request, $modelClass, $confColumns);
 
-        $q = null;
+        $this->resultRecordsTotal = $modelClass::count();
+        $this->resultRecordsFiltered = $this->resultRecordsTotal;
 
-        if(empty($search)){
-            $q = $modelClass::offset($start)->limit($limit);
-        }
+        /**
+         * Mount query
+         */
+        $q = $this->__search();
 
-        else{
-
-            $q = $modelClass::where(function($query) use ($columns, $search) {
-
-                $first = true;
-                foreach($columns as $c){
-                    if(isset($c['searchable']) && $c['searchable'] == false){
-                        continue;
-                    }
-                    
-                    if($first){
-                        $query->where($c['name'], 'LIKE', "%{$search}%");
-                        $first = false;
-                    }else{
-                        $query->orWhere($c['name'], 'LIKE', "%{$search}%");
-                    }
-                }
-            });
-
-            $recordsFiltered = $q->count();
-
-            $q->offset($start)->limit($limit);
-        }
-
-        foreach($extraWhere as $k => $v){
+        foreach ($extraWhere as $k => $v) {
             $q->where($k, $v);
         }
-        
-        if(is_array($order)){
-            foreach($order as $v){
 
-                if(!isset($v['column']) || empty($v['column'])){
-                    continue;
-                }
-
-                if(!isset($columns[$v['column']]['name'])){
-                    throw new ColumnNotFoundException($v['name']);
-                }
-
-                $q->orderBy($columns[$v['column']]['name'], $v['dir']);
-            }
+        /**
+         * Order columns
+         */
+        if (is_array($this->requestOrder)) {
+            $this->__order($q);
         }
 
-        $data = $q->get();
+        /**
+         * Filter by column
+         */
+        if (is_array($this->requestColumns)) {
+            $this->__columns($q);
+        }
 
-        $json_data = [
-            'draw' => $draw,
-            'recordsTotal' => intval($recordsTotal),
-            'recordsFiltered' => intval($recordsFiltered),
-            'data' => $data
-        ];
-        
-        return $json_data;
+        $this->resultData = $q->get();
+
+        return $this->__result();
     }
-    
+
     /**
      * byQueryBuilder
      *
      * @param  mixed $request
      * @param  mixed $modelClass
-     * @param  mixed $columns
+     * @param  mixed $confColumns
      * @return array
      */
-    public function byQueryBuilder(Request $request, Builder $modelClass, array $columns): array
+    public function byQueryBuilder(Request $request, Builder $modelClass, array $confColumns): array
     {
-
-        // Data received
-        $draw = $request->draw ?: $request->input('draw');
-        $limit = $request->length ?: $request->input('length');
-        $start = $request->start ?: $request->input('start');
-        $search = isset($request->search['value']) ? $request->search['value'] : $request->input('search.value');
-        $order = $request->order ?: $request->input('order');
+        /**
+         * Load reveived data
+         */
+        $this->__loadRequestData($request, $modelClass, $confColumns);
         
-        $recordsTotal = $modelClass->count();
-        $recordsFiltered = $recordsTotal;
+        $this->resultRecordsTotal = $modelClass->count();
+        $this->resultRecordsFiltered = $this->resultRecordsTotal;
 
-        $q = null;
+        /**
+         * Mount query
+         */
+        $q = $this->__search();
 
-        if(empty($search)){
-            $q = $modelClass->offset($start)->limit($limit);
+        /**
+         * Order columns
+         */
+        if (is_array($this->requestOrder)) {
+            $this->__order($q);
         }
 
-        else{
+        /**
+         * Filter by column
+         */
+        if (is_array($this->requestColumns)) {
+            $this->__columns($q);
+        }
 
-            $q = $modelClass->where(function($query) use ($columns, $search) {
+        $this->resultData = $q->get();
+
+        return $this->__result();
+    }
+    
+    /**
+     * __loadRequestData
+     *
+     * @return void
+     */
+    private function __loadRequestData(Request $request, Builder|string $modelClass, array $confColumns)
+    {
+        $this->requestDraw = $request->draw ?: $request->input('draw');
+        $this->requestLimit = $request->length ?: $request->input('length');
+        $this->requestStart = $request->start ?: $request->input('start');
+        $this->requestSearch = isset($request->search['value']) ? $request->search['value'] : $request->input('search.value');
+        $this->requestOrder = $request->order ?: $request->input('order');
+        $this->requestColumns = $request->columns ?: $request->input('columns');
+
+        $this->requestModelClass = $modelClass;
+
+        $this->confColumns = $confColumns;
+    }
+    
+    /**
+     * __search
+     *
+     * @param  mixed $query
+     * @return object
+     */
+    private function __search(): object
+    {
+        $q = null;
+
+        if (empty($this->requestSearch)) {
+            $q = $this->requestModelClass->offset($this->requestStart)->limit($this->requestLimit);
+        } else {
+
+            $q = $this->requestModelClass->where(function ($query) {
 
                 $first = true;
-                foreach($columns as $c){
-                    if(isset($c['searchable']) && $c['searchable'] == false){
+                foreach ($this->confColumns as $c) {
+                    if (isset($c['searchable']) && $c['searchable'] == false) {
                         continue;
                     }
-                    
-                    if($first){
-                        $query->where($c['name'], 'LIKE', "%{$search}%");
+
+                    if ($first) {
+                        $query->where($c['name'], 'LIKE', "%" . $this->requestSearch . "%");
                         $first = false;
-                    }else{
-                        $query->orWhere($c['name'], 'LIKE', "%{$search}%");
+                    } else {
+                        $query->orWhere($c['name'], 'LIKE', "%" . $this->requestSearch . "%");
                     }
                 }
             });
 
-            $recordsFiltered = $q->count();
+            $this->resultRecordsFiltered = $q->count();
 
-            $q->offset($start)->limit($limit);
+            $q->offset($this->requestStart)->limit($this->requestLimit);
         }
 
-        if(is_array($order)){
-            foreach($order as $v){
+        return $q;
+    }
 
-                if(!isset($v['column']) || empty($v['column'])){
-                    continue;
-                }
+    /**
+     * __order
+     *
+     * @param  mixed $query
+     * @return void
+     */
+    private function __order(&$query)
+    {
+        foreach ($this->requestOrder as $v) {
 
-                if(!isset($columns[$v['column']]['name'])){
-                    throw new ColumnNotFoundException($v['name']);
-                }
-
-                $q->orderBy($columns[$v['column']]['name'], $v['dir']);
+            if (!isset($v['column']) || empty($v['column'])) {
+                continue;
             }
+
+            if (!isset($this->confColumns[$v['column']]['name'])) {
+                throw new ColumnNotFoundException($v['column']);
+            }
+
+            $query->orderBy($this->confColumns[$v['column']]['name'], $v['dir']);
         }
+    }
 
-        $data = $q->get();
+    /**
+     * __columns
+     *
+     * @param  mixed $query
+     * @return void
+     */
+    private function __columns(&$query)
+    {
+        foreach ($this->requestColumns as $v) {
+            if (
+                !isset($v['name']) || empty($v['name']) ||
+                !isset($v['search']['value']) || empty($v['search']['value'])
+            ) {
+                continue;
+            }
 
-        $json_data = [
-            'draw' => $draw,
-            'recordsTotal' => intval($recordsTotal),
-            'recordsFiltered' => intval($recordsFiltered),
-            'data' => $data
+            if (!isset($this->confColumns[$v['name']]['name'])) {
+                throw new ColumnNotFoundException($v['name']);
+            }
+
+            $query->where($this->confColumns[$v['name']]['name'], 'LIKE', "%" . $v['search']['value'] . "%");
+        }
+    }
+    
+    /**
+     * __result
+     *
+     * @return array
+     */
+    private function __result(): array
+    {
+        return [
+            'draw' => $this->requestDraw,
+            'recordsTotal' => intval($this->resultRecordsTotal),
+            'recordsFiltered' => intval($this->resultRecordsFiltered),
+            'data' => $this->resultData
         ];
-        
-        return $json_data;
     }
 }
