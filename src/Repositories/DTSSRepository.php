@@ -169,7 +169,7 @@ class DTSSRepository implements DTSSRepositoryInterface
         $q = null;
 
         if (empty($this->requestSearch)) {
-            $q = $this->requestModelClass->offset($this->requestStart)->limit($this->requestLimit);
+            $q = $this->requestModelClass::offset($this->requestStart)->limit($this->requestLimit);
         } else {
 
             $q = $this->requestModelClass->where(function ($query) {
