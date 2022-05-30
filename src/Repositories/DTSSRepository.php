@@ -172,7 +172,7 @@ class DTSSRepository implements DTSSRepositoryInterface
             $q = $this->requestModelClass::offset($this->requestStart)->limit($this->requestLimit);
         } else {
 
-            $q = $this->requestModelClass->where(function ($query) {
+            $q = $this->requestModelClass::where(function ($query) {
 
                 $first = true;
                 foreach ($this->confColumns as $c) {
