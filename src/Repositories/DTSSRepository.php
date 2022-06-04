@@ -168,11 +168,14 @@ class DTSSRepository implements DTSSRepositoryInterface
     {
         $q = null;
 
-        if (empty($this->requestSearch)) {
-            $q = $this->requestModelClass::offset($this->requestStart)->limit($this->requestLimit);
-        } else {
+        if(gettype($this->requestModelClass) == 'string'){
+            $q = $this->requestModelClass::whereRaw('1 = 1');
+        }else{
+            $q = $this->requestModelClass->whereRaw('1 = 1');
+        }
 
-            $q = $this->requestModelClass::where(function ($query) {
+        if (empty($this->requestSearch) == false) {
+            $q->where(function ($query) {
 
                 $first = true;
                 foreach ($this->confColumns as $c) {
@@ -190,9 +193,9 @@ class DTSSRepository implements DTSSRepositoryInterface
             });
 
             $this->resultRecordsFiltered = $q->count();
-
-            $q->offset($this->requestStart)->limit($this->requestLimit);
         }
+
+        $q->offset($this->requestStart)->limit($this->requestLimit);
 
         return $q;
     }
